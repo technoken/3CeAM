@@ -6348,12 +6348,15 @@ ACMD_FUNC(useskill)
 		return -1;
 	}
 
-	if (skillnum >= HM_SKILLBASE && skillnum < HM_SKILLBASE+MAX_HOMUNSKILL
-		&& sd->hd && merc_is_hom_active(sd->hd)) // (If used with @useskill, put the homunc as dest)
-		bl = &sd->hd->bl;
+	if (skillnum >= HM_SKILLBASE && skillnum < HM_SKILLBASE+MAX_HOMUNSKILL && sd->hd && merc_is_hom_active(sd->hd))
+		bl = &sd->hd->bl;// Put the homunculus as dest.
+	if (skillnum >= MC_SKILLBASE && skillnum < MC_SKILLBASE+MAX_MERCSKILL && sd->md)
+		bl = &sd->md->bl;// Put the mercenary as dest.
+	else if (skillnum >= EL_SKILLBASE && skillnum < EL_SKILLBASE+MAX_ELEMSKILL && sd->ed)
+		bl = &sd->ed->bl;// Put the elemental as dest.
 	else
 		bl = &sd->bl;
-	
+
 	if (skill_get_inf(skillnum)&INF_GROUND_SKILL)
 		unit_skilluse_pos(bl, pl_sd->bl.x, pl_sd->bl.y, skillnum, skilllv);
 	else
@@ -7970,6 +7973,36 @@ ACMD_FUNC(homtalk)
 }
 
 /*==========================================
+ * make the elemental speak [Rytech]
+ *------------------------------------------*/
+ACMD_FUNC(elemtalk)
+{
+	char mes[100],temp[100];
+
+	nullpo_retr(-1, sd);
+
+	if (sd->sc.count && //no "chatting" while muted.
+		(sd->sc.data[SC_BERSERK] || sd->sc.data[SC_DEEPSLEEP] ||
+		(sd->sc.data[SC_NOCHAT] && sd->sc.data[SC_NOCHAT]->val1&MANNER_NOCHAT)))
+		return -1;
+
+	if ( !sd->ed ) {
+		clif_displaymessage(fd, "You do not have a elemental.");
+		return -1;
+	}
+
+	if (!message || !*message || sscanf(message, "%99[^\n]", mes) < 1) {
+		clif_displaymessage(fd, "Please, enter a message (usage: @elemtalk <message>");
+		return -1;
+	}
+
+	snprintf(temp, sizeof temp ,"%s : %s", sd->ed->db->name, mes);
+	clif_message(&sd->ed->bl, temp);
+
+	return 0;
+}
+
+/*==========================================
  * Show homunculus stats
  *------------------------------------------*/
 ACMD_FUNC(hominfo)
@@ -8008,10 +8041,12 @@ ACMD_FUNC(hominfo)
 	return 0;
 }
 
+/*==========================================
+ * Show elementals stats
+ *------------------------------------------*/
 ACMD_FUNC(eleminfo)
 {
 	struct elemental_data *ed;
-	struct s_elemental_db *db;
 	struct status_data *status;
 	unsigned int minutes, seconds;
 	nullpo_retr(-1, sd);
@@ -8023,7 +8058,6 @@ ACMD_FUNC(eleminfo)
 
 	// Should I add the elemental's element, element lv, and size too?
 	ed = sd->ed;
-	db = ed->db;
 	status = status_get_status_data(&ed->bl);
 
 	// Calculate remaining summon time.
@@ -8032,7 +8066,7 @@ ACMD_FUNC(eleminfo)
 	seconds -= (seconds/60>0)?(seconds/60)*60:0;
 
 	snprintf(atcmd_output, sizeof(atcmd_output) ,"Elemental stats for: %s (Lv %d)",
-		db->name, db->status.size+1);
+		ed->db->name, status->size+1);
 	clif_displaymessage(fd, atcmd_output);
 
 	snprintf(atcmd_output, sizeof(atcmd_output) ,"HP : %d/%d - SP : %d/%d",
@@ -8053,11 +8087,6 @@ ACMD_FUNC(eleminfo)
 
 	snprintf(atcmd_output, sizeof(atcmd_output) ,"Summon Time: %d minutes, %d seconds",
 		minutes, seconds);
-	clif_displaymessage(fd, atcmd_output);
-
-	// Temp code to help with seeing regen rates.
-	snprintf(atcmd_output, sizeof(atcmd_output) ,"HP/SP Regen Rate : %d%%/%d%%",
-		ed->regen.rate.hp, ed->regen.rate.sp);
 	clif_displaymessage(fd, atcmd_output);
 
 	return 0;
@@ -9805,6 +9834,7 @@ AtCommandInfo atcommand_info[] = {
 	{ "hommutation",       60,60,     atcommand_hommutation },
 	{ "hommax",            60,60,     atcommand_hommax },
 	//Elemental Commands
+	{ "elemtalk",          10,10,     atcommand_elemtalk },
 	{ "eleminfo",           1,1,      atcommand_eleminfo }
 };
 
